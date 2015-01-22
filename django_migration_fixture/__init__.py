@@ -1,12 +1,22 @@
 import os
-from django.core import serializers
 
+from django.core import serializers
+from django.core.management.color import no_style
+from django.db import connection
 from django.db.models import signals
 
 
 class FixtureObjectDoesNotExist(Exception):
     """Raised when attempting to roll back a fixture and the instance can't be found"""
     pass
+
+
+def reset_db_sequences(models):
+    if not models:
+        return
+    with connection.cursor() as cursor:
+        for sql in connection.ops.sequence_reset_sql(no_style(), models):
+            cursor.execute(sql)
 
 
 def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
@@ -42,7 +52,10 @@ def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
 
         This delays the actual loading until this app itself is being called
         through the post_migrate signal hook.  This is necessary for
-        the contenttypes and auth data to be available."""
+        the contenttypes and auth data to be available.
+
+        After the fixture has been loaded the database sequences for affected
+        models are being 'reset' (using `coalesce` with PostgreSQL)."""
 
         def signal_handler(app_config, sender, **kwargs):
             if sender.label == "django_migration_fixture":
@@ -52,6 +65,8 @@ def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
                 for obj in get_objects():
                     obj.save()
                     models.add(obj.object._meta.model)
+
+                reset_db_sequences(models)
 
         signals.post_migrate.connect(signal_handler, weak=False)
 
