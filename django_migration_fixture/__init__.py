@@ -1,6 +1,9 @@
 import os
 from django.core import serializers
 
+from django.contrib.contenttypes.management import update_all_contenttypes
+from django.contrib.auth.management import create_permissions
+
 
 class FixtureObjectDoesNotExist(Exception):
     """Raised when attempting to roll back a fixture and the instance can't be found"""
@@ -36,6 +39,9 @@ def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
                     yield obj
 
     def load_fixture(apps, schema_editor):
+        update_all_contenttypes()
+        create_permissions(apps.get_app_config('auth'), verbosity=0)
+
         for obj in get_objects():
             obj.save()
 
