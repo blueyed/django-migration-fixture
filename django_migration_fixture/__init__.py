@@ -1,8 +1,7 @@
 import os
 from django.core import serializers
 
-from django.contrib.contenttypes.management import update_all_contenttypes
-from django.contrib.auth.management import create_permissions
+from django.db.models import signals
 
 
 class FixtureObjectDoesNotExist(Exception):
@@ -38,12 +37,23 @@ def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
                 for obj in objects:
                     yield obj
 
-    def load_fixture(apps, schema_editor):
-        update_all_contenttypes()
-        create_permissions(apps.get_app_config('auth'), verbosity=0)
+    def load_fixture(app_config, schema_editor):
+        """Entrypoint for RunPython to load the fixture.
 
-        for obj in get_objects():
-            obj.save()
+        This delays the actual loading until this app itself is being called
+        through the post_migrate signal hook.  This is necessary for
+        the contenttypes and auth data to be available."""
+
+        def signal_handler(app_config, sender, **kwargs):
+            if sender.label == "django_migration_fixture":
+                assert app_config.label == "django_migration_fixture"
+
+                models = set()
+                for obj in get_objects():
+                    obj.save()
+                    models.add(obj.object._meta.model)
+
+        signals.post_migrate.connect(signal_handler, weak=False)
 
     def unload_fixture(apps, schema_editor):
         for obj in get_objects():
