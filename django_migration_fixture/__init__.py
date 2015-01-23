@@ -68,6 +68,10 @@ def fixture(app, fixtures, fixtures_dir='fixtures', raise_does_not_exist=False):
 
                 reset_db_sequences(models)
 
+                # Disconnect the signal, otherwise we might be called during
+                # e.g. flush (in tests) again.
+                signals.post_migrate.disconnect(signal_handler, weak=False)
+
         signals.post_migrate.connect(signal_handler, weak=False)
 
     def unload_fixture(apps, schema_editor):
